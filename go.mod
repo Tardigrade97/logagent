@@ -7,6 +7,7 @@ require (
 	github.com/fsnotify/fsnotify v1.5.1 // indirect
 	github.com/hpcloud/tail v1.0.0
 	github.com/sirupsen/logrus v1.8.1
+	go.etcd.io/etcd/client/v3 v3.5.2
 	gopkg.in/fsnotify.v1 v1.4.7 // indirect
 	gopkg.in/ini.v1 v1.66.4
 )

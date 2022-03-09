@@ -1,16 +1,18 @@
 package main
 
 import (
+	"Logagent/etcd"
 	"Logagent/kafka"
 	"Logagent/tailfile"
 	"fmt"
-	"github.com/Shopify/sarama"
+	"github.com/sirupsen/logrus"
 	"gopkg.in/ini.v1"
 )
 
 type Config struct {
 	KafkaConfig `ini:"kafka"`
 	Logs        `ini:"logs"`
+	EtcdConfig  `int:"etcd"`
 }
 
 type KafkaConfig struct {
@@ -23,23 +25,13 @@ type Logs struct {
 	Logpath string `ini:"log_path"`
 }
 
-func startService() (err error) {
-	// tailfile get logs send to client
-	for {
-		line, ok := <-tailfile.TailObj.Lines
-		if !ok {
-			fmt.Println("tail file close reopen,filename:%s\n", tailfile.TailObj.Filename)
-			continue
-		}
-		// 处理数据:利用通道将同步数据改为异步
-		// 将读取的日志封装成kafka日志格式
-		msg := &sarama.ProducerMessage{}
-		msg.Topic = "web_log"
-		msg.Value = sarama.StringEncoder(line.Text)
-		// 将数据放入管道
-		kafka.ToMsgChan(msg)
-	}
-	return
+type EtcdConfig struct {
+	Address    string `ini:"address"`
+	CollectKey string `ini:"collect_key"`
+}
+
+func starService() {
+	select {}
 }
 
 func main() {
@@ -59,18 +51,26 @@ func main() {
 	}
 	fmt.Println("kafka init success")
 
-	// 根据配置中的日志路径初始化
-	err = tailfile.Init(configObj.Logpath)
+	// 初始化etcd连接
+	err = etcd.Init([]string{configObj.EtcdConfig.Address})
 	if err != nil {
-		fmt.Println("tailfile init failed,err:", err)
+		logrus.Errorf("init etcd failed,err:", err)
+		return
+	}
+	// 从etcd中拉取要收集的配置项目
+	allConf, err := etcd.GetConfig(configObj.EtcdConfig.CollectKey)
+	if err != nil {
+		logrus.Errorf("get conf from etcd failed,err:", err)
+		return
+	}
+	fmt.Println(allConf)
+
+	// 根据配置中的日志路径初始化
+	err = tailfile.Init(allConf) //把etcd中获取的配置项传入init
+	if err != nil {
+		logrus.Errorf("tailfile init failed,err:", err)
 		return
 	}
 	fmt.Println("init tailfile sucess!")
-
-	// 获取并处理log
-	err = startService()
-	if err != nil {
-		fmt.Println("startService failed!err:", err)
-		return
-	}
+	starService()
 }
